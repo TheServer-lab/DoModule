@@ -32,7 +32,7 @@ end_if
 # --- Run lint ---
 say ""
 say "Running lint..."
-lint_reserved(target_file)
+lint_reserved target_file
 
 # --- Done ---
 say ""
