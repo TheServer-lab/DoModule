@@ -20,7 +20,6 @@ if target_file == ""
     exit
 end_if
 
-# Optional: check existence safely
 global_variable = file_exists
 file_exists = exists(target_file)
 
@@ -33,7 +32,7 @@ end_if
 # --- Run lint ---
 say ""
 say "Running lint..."
-lint_reserved target_file
+lint_reserved(target_file)
 
 # --- Done ---
 say ""
