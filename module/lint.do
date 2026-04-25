@@ -1,16 +1,20 @@
-# lint.do
-
 function lint_reserved file_path
 
     local_variable = line, clean, name, left
     local_variable = reserved, risky, seen_vars
     local_variable = parts, var, line_num
+    local_variable = errors, warnings, infos
+    local_variable = parts_len, trimmed, right
 
     reserved = split("user_home,username,downloads,desktop,documents,appdata,temp,today,now,year,month,day,hour,minute,second,time,loop_count", ",")
     risky = split("file,path,data,input,output", ",")
 
     seen_vars = split("", ",")
     line_num = 0
+
+    errors = 0
+    warnings = 0
+    infos = 0
 
     say ""
     say "Linting..."
@@ -21,32 +25,25 @@ function lint_reserved file_path
         line_num = line_num + 1
         clean = line
 
-        # Skip comments
-        if startswith(trim(clean), "#")
+        trimmed = trim(clean)
+
+        # --- Skip full-line comments ---
+        if startswith(trimmed, "#")
             continue
         end_if
 
-        if startswith(trim(clean), "//")
+        if startswith(trimmed, "//")
             continue
         end_if
 
-        # Remove inline comments
+        # --- Remove inline comments ---
         if contains(clean, "#")
-            clean = split(clean, "#")[0]
-        end_if
-
-        if contains(clean, "//")
-            clean = split(clean, "//")[0]
-        end_if
-
-        # Remove simple strings
-        if contains(clean, "\"")
-            parts = split(clean, "\"")
+            parts = split(clean, "#")
             clean = parts[0]
         end_if
 
-        if contains(clean, "'")
-            parts = split(clean, "'")
+        if contains(clean, "//")
+            parts = split(clean, "//")
             clean = parts[0]
         end_if
 
@@ -56,21 +53,50 @@ function lint_reserved file_path
             continue
         end_if
 
-        # --- global_variable detection ---
+        # --- Skip lines with strings (safe for 0.6.15) ---
+        if contains(clean, "\"")
+            continue
+        end_if
+
+        if contains(clean, "'")
+            continue
+        end_if
+
+        # --- BASIC UNKNOWN COMMAND CHECK ---
+        if startswith(clean, "rn ")
+            warn "[Line {line_num}] Unknown command 'rn' (did you mean 'run'?)"
+            warnings = warnings + 1
+        end_if
+
+        # --- GLOBAL VARIABLE DETECTION ---
         if startswith(clean, "global_variable")
 
             parts = split(clean, "=")
+            parts_len = length(parts)
 
-            if length(parts) > 1
+            if parts_len > 1
                 parts = split(parts[1], ",")
 
                 for_each var in parts
                     name = trim(var)
 
+                    if name == ""
+                        warn "[Line {line_num}] Empty variable name"
+                        errors = errors + 1
+                        continue
+                    end_if
+
+                    # invalid name
+                    if contains(name, " ")
+                        warn "[Line {line_num}] Invalid variable name: {name}"
+                        errors = errors + 1
+                    end_if
+
                     # duplicate check
                     for_each s in seen_vars
                         if name == s
-                            warn '[Line {line_num}] Duplicate variable: {name}'
+                            warn "[Line {line_num}] Duplicate variable: {name}"
+                            warnings = warnings + 1
                         end_if
                     end_for
 
@@ -79,14 +105,16 @@ function lint_reserved file_path
                     # reserved check
                     for_each r in reserved
                         if name == r
-                            warn '[Line {line_num}] Reserved variable: {name}'
+                            warn "[Line {line_num}] Reserved variable: {name}"
+                            warnings = warnings + 1
                         end_if
                     end_for
 
                     # risky check
                     for_each x in risky
                         if name == x
-                            say '[INFO][Line {line_num}] Risky name: {name}'
+                            say "[INFO] Line {line_num}: Risky name → {name}"
+                            infos = infos + 1
                         end_if
                     end_for
 
@@ -96,10 +124,12 @@ function lint_reserved file_path
             continue
         end_if
 
-        # --- assignment detection ---
+        # --- ASSIGNMENT DETECTION ---
         if contains(clean, "=")
 
             parts = split(clean, "=")
+            parts_len = length(parts)
+
             left = trim(parts[0])
 
             # ignore control lines
@@ -121,10 +151,33 @@ function lint_reserved file_path
 
             name = left
 
+            if name == ""
+                warn "[Line {line_num}] Invalid assignment (missing variable name)"
+                errors = errors + 1
+                continue
+            end_if
+
+            # invalid name
+            if contains(name, " ")
+                warn "[Line {line_num}] Invalid variable name: {name}"
+                errors = errors + 1
+            end_if
+
+            # empty assignment
+            if parts_len > 1
+                right = trim(parts[1])
+
+                if right == ""
+                    warn "[Line {line_num}] Empty assignment: {name}"
+                    errors = errors + 1
+                end_if
+            end_if
+
             # duplicate check
             for_each s in seen_vars
                 if name == s
-                    warn '[Line {line_num}] Duplicate assignment: {name}'
+                    warn "[Line {line_num}] Duplicate assignment: {name}"
+                    warnings = warnings + 1
                 end_if
             end_for
 
@@ -133,14 +186,16 @@ function lint_reserved file_path
             # reserved check
             for_each r in reserved
                 if name == r
-                    warn '[Line {line_num}] Reserved assignment: {name}'
+                    warn "[Line {line_num}] Reserved assignment: {name}"
+                    warnings = warnings + 1
                 end_if
             end_for
 
             # risky check
             for_each x in risky
                 if name == x
-                    say '[INFO][Line {line_num}] Risky name: {name}'
+                    say "[INFO] Line {line_num}: Risky name → {name}"
+                    infos = infos + 1
                 end_if
             end_for
 
@@ -149,8 +204,11 @@ function lint_reserved file_path
     end_for
 
     say ""
+    say "========================================="
     say "Lint complete."
+    say 'Errors: {errors}'
+    say 'Warnings: {warnings}'
+    say 'Info: {infos}'
+    say "========================================="
 
 end_function
-
-
